@@ -1,19 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(HW1 LANGUAGES CXX)
 
-find_program(LCOV_EXECUTABLE lcov)
-find_program(GENHTML_EXECUTABLE genhtml)
-
-set(VALID_BUILD_TYPES Debug Release Coverage)
-
-set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS ${VALID_BUILD_TYPES})
-
-if(CMAKE_BUILD_TYPE STREQUAL "Coverage")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
-endif()
-
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -34,11 +21,25 @@ target_include_directories(HW1_lib PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/headers/handlers/parser
 )
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -fsanitize=address -fsanitize=leak -Werror -Wall -Wextra -Wpedantic")
+
 add_executable(HW1
         src/main.cpp
 )
 
 target_link_libraries(HW1 PRIVATE HW1_lib)
+
+
+set(VALID_BUILD_TYPES Debug Coverage)
+
+set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS ${VALID_BUILD_TYPES})
+
+if(CMAKE_BUILD_TYPE STREQUAL "Coverage")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
+endif()
+
 find_package(GTest REQUIRED)
 enable_testing()
 

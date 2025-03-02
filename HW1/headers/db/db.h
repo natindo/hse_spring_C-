@@ -3,15 +3,19 @@
 
 #include <string>
 
-struct db {
+constexpr size_t INIT_SIZE = 1000;
+
+struct data {
     std::string key;
     std::string value;
+    data* next;
 };
 
 class Database {
 public:
     Database();
     ~Database();
+
     Database(const Database &rhs) = delete;
     Database operator=(const Database &rhs) = delete;
     Database(Database &&rhs) = delete;
@@ -21,16 +25,11 @@ public:
     bool del(const std::string& key);
     [[nodiscard]] std::string get(const std::string& key) const;
 
-    size_t getSize() const;
-    size_t getCapacity() const;
-
 private:
-    db* database_;
-    size_t size_;
-    size_t capacity_;
+    data** database_ = nullptr;
+    size_t size_ = INIT_SIZE;
 
-    void reallocate(size_t newSize);
-    [[nodiscard]] int findValue(const std::string& key) const;
+    [[nodiscard]] static size_t getHash(const std::string& key) ;
 };
 
 #endif //BD_H

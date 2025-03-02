@@ -4,46 +4,29 @@
 #include <parser.h>
 #include <response.h>
 #include <gtest/gtest.h>
-
-TEST(bd_test, allocTest) {
-    Database db;
-    db.set("key1", "value1");
-    db.set("key2", "value1");
-    db.set("key3", "value1");
-    db.set("key4", "value1");
-    db.set("key5", "value1");
-    db.set("key6", "value1");
-    db.set("key7", "value1");
-    db.set("key8", "value1");
-    db.set("key9", "value1");
-    db.set("key10", "value1");
-    db.set("key11", "value1");
-
-    EXPECT_EQ(db.getSize(), 11);
-    EXPECT_EQ(db.getCapacity(), 20);
-}
+#include <app.h>
 
 TEST(bd_test, simleTestSetGetDel) {
     Database db;
-    EXPECT_EQ(db.get("key"), "not found");
+    EXPECT_EQ(db.get("key"), "");
     EXPECT_EQ(db.del("key"), false);
     EXPECT_EQ(db.set("key", "value1"), true);
     EXPECT_EQ(db.get("key"), "value1");
     EXPECT_EQ(db.set("key", "value2"), true);
     EXPECT_EQ(db.get("key"), "value2");
     EXPECT_EQ(db.del("key"), true);
-    EXPECT_EQ(db.get("key"), "not found");
+    EXPECT_EQ(db.get("key"), "");
 }
 
-TEST(bd_test, dataErasureDeletion) {
+TEST(bd_test, simleCorrectlyDeleteAndInsertDataInOneBacket) {
     Database db;
-    EXPECT_EQ(db.set("key1", "value1"), true);
-    EXPECT_EQ(db.set("key2", "value1"), true);
-    EXPECT_EQ(db.set("key3", "value1"), true);
-    EXPECT_EQ(db.set("key4", "value1"), true);
-    EXPECT_EQ(db.set("key5", "value1"), true);
-    EXPECT_EQ(db.set("key6", "value1"), true);
-    EXPECT_EQ(db.del("key3"), true);
+    EXPECT_EQ(db.set("key", "value1"), true);
+    EXPECT_EQ(db.set("mdx", "value2"), true);
+    EXPECT_EQ(db.set("ocw", "value3"), true);
+    EXPECT_EQ(db.set("qbv", "value4"), true);
+    EXPECT_EQ(db.get("ocw"), "value3");
+    EXPECT_EQ(db.del("ocw"), true);
+    EXPECT_EQ(db.get("ocw"), "");
 }
 
 TEST(handlers_test, simpleRequestTest) {
@@ -76,6 +59,36 @@ TEST(handlers_test, simpleParserTest) {
     const std::string inputUnknown("BJIKL key123 val321");
     Request reqUnknown = Parser::parse(inputUnknown);
     EXPECT_EQ(reqUnknown.getType(), RequestType::UNKNOWN);
+}
+
+TEST(app_test, simpleAppTest) {
+    std::string inputData =
+        "ABC key1\n"
+        "GET key1\n"
+        "DEL key1\n"
+        "SET key1 value1\n"
+        "GET key1\n"
+        "DEL key1\n";
+
+    std::string expectedOutput =
+        "\n"
+        "not found\n"
+        "not found\n"
+        "ok\n"
+        "value1\n"
+        "ok\n";
+
+    // Подменим потоки ввода-вывода, так как "run" ничего не возвращает
+    std::istringstream inputStream(inputData);
+    std::ostringstream outputStream;
+
+    std::cin.rdbuf(inputStream.rdbuf());
+    std::cout.rdbuf(outputStream.rdbuf());
+
+    App app;
+    app.run();
+
+    EXPECT_EQ(outputStream.str(), expectedOutput);
 }
 
 int main(int argc, char** argv) {

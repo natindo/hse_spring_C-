@@ -7,11 +7,8 @@
 #include <string>
 
 int App::run() {
-    while (true) {
-        std::string input;
-        if (!std::getline(std::cin, input)) {
-            break;
-        }
+    std::string input;
+    while (std::getline(std::cin, input)) {
         Response resp;
         switch (Request req = Parser::parse(input); req.getType()) {
             case UNKNOWN:
@@ -20,17 +17,21 @@ int App::run() {
                 if (db_.set(req.getKey(),req.getValue())) {
                     resp.setResponse("ok");
                 }
-                break;
+            break;
             case GET:
-                resp.setResponse(db_.get(req.getKey()));
-                break;
+                if (db_.get(req.getKey()).empty()) {
+                    resp.setResponse("not found");
+                } else {
+                    resp.setResponse(db_.get(req.getKey()));
+                }
+            break;
             case DEL:
                 if (db_.del(req.getKey())) {
                     resp.setResponse("ok");
                 } else {
                     resp.setResponse("not found");
                 }
-                break;
+            break;
         }
         std::cout << resp.getResponse() << std::endl;
     }

@@ -1,79 +1,108 @@
 #include "db.h"
 #include <iostream>
 
-constexpr size_t INIT_SIZE = 10;
-// constexpr std::string NOT_FOUND ();
-
-Database::Database() : database_(nullptr), size_(0), capacity_(0) {
-    reallocate(INIT_SIZE);
+Database::Database() {
+    database_ = new data*[INIT_SIZE];
+    for (size_t i = 0; i < INIT_SIZE; i++) {
+        database_[i] = nullptr;
+    }
 }
 
 Database::~Database() {
-    delete[] database_;
+    if (database_ != nullptr) {
+        for (size_t i = 0; i < INIT_SIZE; i++) {
+            data* current = database_[i];
+            while (current != nullptr) {
+                data* toDelete = current;
+                current = current->next;
+                delete toDelete;
+            }
+        }
+        delete[] database_;
+    }
 }
 
 bool Database::set(const std::string& key, const std::string& value) {
-    if (size_ == capacity_) {
-        reallocate(size_ * 2);
+    if (database_ == nullptr) {
+        return false;
     }
-    const int index = findValue(key);
-    if (index > -1) {
-        database_[index].value = value;
-        return true;
+    const size_t hash = getHash(key);
+    const size_t index = hash % INIT_SIZE;
+
+    data* current = database_[index];
+    data* prev = nullptr;
+
+    while (current != nullptr) {
+        if (current->key == key) {
+            current->value = value;
+            return true;
+        }
+        prev = current;
+        current = current->next;
     }
-    database_[size_].key = key;
-    database_[size_].value = value;
-    size_++;
+
+    const auto newData = new data();
+    newData->key = key;
+    newData->value = value;
+    newData->next = nullptr;
+
+    if (prev == nullptr) {
+        database_[index] = newData;
+    } else {
+        prev->next = newData;
+    }
     return true;
 }
 
 bool Database::del(const std::string& key) {
-    const size_t index = findValue(key);
-    if (index == -1) {
+    if (database_ == nullptr) {
         return false;
     }
+    const size_t hash = getHash(key);
+    const size_t index = hash % INIT_SIZE;
 
-    for (size_t i = index; i < size_ - 1; i++) {
-        database_[i].key = database_[i + 1].key;
-        database_[i].value = database_[i + 1].value;
+    data* current = database_[index];
+    data* prev = nullptr;
+
+    while (current != nullptr) {
+        if (current->key == key) {
+            if (prev == nullptr) {
+                database_[index] = current->next;
+            } else {
+                prev->next = current->next;
+            }
+            delete current;
+            return true;
+        }
+        prev = current;
+        current = current->next;
     }
-    size_--;
-    return true;
+    return false;
 }
 
 std::string Database::get(const std::string& key) const {
-    const size_t index = findValue(key);
-    if (index == -1) {
-        return "not found";
+    if (database_ == nullptr) {
+        return "";
     }
-    return database_[index].value;
-}
 
-void Database::reallocate(const size_t newSize) {
-    const auto newDatabase = new db[newSize];
-    if (database_ != nullptr) {
-        for (size_t i = 0; i < size_; i++) {
-            newDatabase[i] = database_[i];
+    const size_t hash = getHash(key);
+    const size_t index = hash % size_;
+
+    data* current = database_[index];
+
+    while (current != nullptr) {
+        if (current->key == key) {
+            return current->value;
         }
-        delete[] database_;
+        current = current->next;
     }
-    database_ = newDatabase;
-    capacity_ = newSize;
+    return "";
 }
 
-int Database::findValue(const std::string& key) const {
-    for (int i = 0; i < size_; i++) {
-        if (database_[i].key == key) {
-            return i;
-        }
+size_t Database::getHash(const std::string& key) {
+    size_t result = 0;
+    for (const char c : key) {
+        result += c;
     }
-    return -1;
-}
-
-size_t Database::getSize() const {
-    return size_;
-}
-
-size_t Database::getCapacity() const {
-    return capacity_;
+    return result;
 }

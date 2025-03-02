@@ -1,6 +1,6 @@
 rm -rf build
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Coverage
-cmake --build build
+cmake --build build -j 10
 cd build
 ctest --verbose
 lcov --directory . --capture --output-file coverage.info
