@@ -290,7 +290,7 @@ Matrix Matrix::operator * (const Complex& val) const {
     Matrix result(rows_, cols_);
     for (int32_t i = 0; i < rows_; ++i) {
         for (int32_t j = 0; j < cols_; ++j) {
-            result[i][j] += proxy_rows_[i][j] * val;
+            result[i][j] = proxy_rows_[i][j] * val;
         }
     }
     return result;
@@ -300,8 +300,11 @@ Matrix Matrix::operator * (const Matrix& rhs) const {
     checkSameSize(rhs);
     Matrix result(rows_, cols_);
     for (int32_t i = 0; i < rows_; ++i) {
-        for (int32_t j = 0; j < cols_; ++j) {
-            result[i][j] += proxy_rows_[i][j] * rhs[i][j];
+        for (int32_t j = 0; j < rhs.cols_; ++j) {
+            result[i][j] = 0;
+            for (int32_t k = 0; k < cols_; ++k) {
+                result[i][j] += proxy_rows_[i][k] * rhs[k][j];
+            }
         }
     }
     return result;
