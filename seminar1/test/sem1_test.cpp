@@ -54,9 +54,7 @@ TEST(MatrixTest, AtMethodInvalid) {
 }
 
 TEST(MatrixTest, FileConstructorInvalidFile) {
-    Matrix m("blablabla");
-    EXPECT_EQ(m.getRows(), 0);
-    EXPECT_EQ(m.getCols(), 0);
+    EXPECT_THROW(Matrix m("blablabla"), std::runtime_error);
 }
 
 TEST(MatrixTest, FileConstructorGoodData) {

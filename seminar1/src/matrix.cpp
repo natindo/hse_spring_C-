@@ -58,36 +58,36 @@ Matrix::Matrix (const int32_t rows, const int32_t cols) : rows_(rows), cols_(col
 Matrix::Matrix (const std::string& filename) {
     fd = open(filename.c_str(), O_RDWR);
     if (fd == -1) {
-        std::cerr << "Не удалось открыть файл" << std::endl;
+        throw std::runtime_error("Не удалось открыть файл");
         return;
     }
 
     struct stat sb{};
     if (fstat(fd, &sb) == -1) {
-        std::cerr << "Не удалось выполнить fstat" << std::endl;
+        throw std::runtime_error("Не удалось выполнить fstat");
         close(fd);
         return;
     }
 
     fileSize = sb.st_size;
     if (fileSize == 0) {
-        std::cerr << "Файл пустой" << std::endl;
+        throw std::runtime_error("Файл пустой");
         close(fd);
         return;
     }
 
 
     mapPtr = mmap(
-        nullptr,           // Адрес, с которого хотим отобразить (nullptr => ОС выберет адрес сама)
-        fileSize,          // Количество байт для отображения
-        PROT_READ | PROT_WRITE, // Права доступа (чтение/запись)
-        MAP_SHARED,        // Разделяемое отображение (изменения отобразятся в файле)
-        fd,                // Дескриптор файла
-        0                  // Смещение в файле (начиная с 0)
+        nullptr,
+        fileSize,
+        PROT_READ | PROT_WRITE,
+        MAP_SHARED,
+        fd,
+        0
     );
 
     if (mapPtr == MAP_FAILED) {
-        std::cerr << "Не удалось выполнить mmap" << std::endl;
+        throw std::runtime_error("Не удалось выполнить mmap");
         close(fd);
         return;
     }
@@ -98,7 +98,7 @@ Matrix::Matrix (const std::string& filename) {
 
     iss >> rows_ >> cols_;
     if (!iss) {
-        std::cerr << "Ошибка чтения размеров матрицы\n";
+        throw std::runtime_error("Ошибка чтения размеров матрицы");
         return;
     }
 
@@ -107,13 +107,12 @@ Matrix::Matrix (const std::string& filename) {
         proxy_rows_[i] = ProxyRow(cols_);
     }
 
-    // Считываем данные по строкам
     for (int32_t r = 0; r < rows_; ++r) {
         for (int32_t c = 0; c < cols_; ++c) {
             double re = 0.0, im = 0.0;
             iss >> re >> im;
             if (!iss) {
-                std::cerr << "Ошибка чтения элемента матрицы\n";
+                throw std::runtime_error("Ошибка чтения размеров матрицы");
                 return;
             }
             proxy_rows_[r][c] = Complex(re, im);
@@ -388,8 +387,7 @@ Matrix Matrix::solveSystem(const Matrix& b) const {
         throw std::runtime_error("solveSystem: b must be (N x 1)");
     }
 
-    //Метод Гаусса
-
+    // Gauss method
     const int32_t n = rows_;
     Matrix aug(n, n+1);
 
@@ -400,7 +398,7 @@ Matrix Matrix::solveSystem(const Matrix& b) const {
         aug[r][n] = b[r][0];
     }
 
-    // Прямой ход
+    // straight move
     for (int i = 0; i < n; ++i) {
         if (aug[i][i] == Complex(0.0, 0.0)) {
             bool found = false;
@@ -425,7 +423,7 @@ Matrix Matrix::solveSystem(const Matrix& b) const {
         }
     }
 
-    // Обратный ход
+    // reverse move
     Matrix x(n, 1);
     for (int i = n - 1; i >= 0; --i) {
         Complex sum = aug[i][n];
