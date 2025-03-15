@@ -20,31 +20,51 @@ class Matrix {
     class ProxyRow {
     public:
         ProxyRow();
-        ProxyRow(Complex* row_ptr, int32_t cols);
+        explicit ProxyRow(int32_t cols_count);
+
+        ProxyRow(const ProxyRow&) = delete;
+        ProxyRow& operator=(const ProxyRow&) = delete;
+
+        ProxyRow(ProxyRow&&) noexcept;
+        ProxyRow& operator=(ProxyRow&&) noexcept;
 
         Complex& operator[](int32_t col) const;
 
+        ~ProxyRow();
+
+        int32_t getColsNumber() const;
+
     private:
-        Complex* row_ptr_ = nullptr;
-        int32_t cols_ = 0;
+        Complex* data_ = nullptr;
+        int32_t cols_number_ = 0;
     };
 
 public:
+    // ----------- copy not approved ----------- //
     Matrix() = delete;
     Matrix(const Matrix&) = delete;
     Matrix& operator=(const Matrix&) = delete;
 
+    // ----------- move ----------- //
     Matrix(Matrix&& rhs) noexcept;
     Matrix& operator=(Matrix&& other) noexcept;
 
+    // ----------- constr ----------- //
     Matrix (int32_t rows, int32_t cols);
     Matrix (const std::string& filename);
+
     ~Matrix();
 
-    [[nodiscard]] Matrix clone() const;
-    ProxyRow& operator[](int32_t row) const;
+    // ----------- accessing elements ----------- //
+    [[nodiscard]] ProxyRow& operator[](int32_t row) const;
     [[nodiscard]] Complex& at(int32_t row, int32_t col) const;
 
+    // ----------- utilities ----------- //
+    [[nodiscard]] Matrix clone() const;
+    [[nodiscard]] int32_t getRows() const;
+    [[nodiscard]] int32_t getCols() const;
+
+    // ----------- operators ----------- //
     Matrix& operator -= (const Complex& val);
     Matrix& operator -= (const Matrix& rhs);
     Matrix operator - (const Complex& val) const;
@@ -62,28 +82,25 @@ public:
 
     Matrix operator - () const;
 
-    [[nodiscard]] int32_t getRows() const;
-    [[nodiscard]] int32_t getCols() const;
-
-    [[nodiscard]] Complex det() const;
-
-    [[nodiscard]] Matrix solveSystem(const Matrix& b) const;
+    // ----------- math calc ----------- //
+    [[nodiscard]] Complex det() const; //determinant
+    [[nodiscard]] Matrix solveSystem(const Matrix& b) const; // solve system of linear equations
 
     friend std::ostream& operator<<(std::ostream& out, const Matrix& m);
 
 private:
-    void checkSameSize(const Matrix& rhs) const;
-    void checkBounds( int32_t row, int32_t col) const;
-    static void swapRows(const Matrix& mat, int32_t r1, int32_t r2);
     static Complex onlyPositiveZeros(const Complex& mat);
+
+    void checkSameSize(const Matrix& rhs) const;
+    void checkBounds(int32_t row, int32_t col) const;
+    static void swapRows(const Matrix& mat, int32_t r1, int32_t r2);
 
 private:
     int32_t rows_ = 0;
     int32_t cols_ = 0;
-    Complex* data_ = nullptr;
-    ProxyRow* row_proxies_ = nullptr;
+    ProxyRow* proxy_rows_ = nullptr;
 
-    int fd = 0;
+    int fd = -1;
     std::size_t fileSize = 0;
     void* mapPtr = nullptr;
 };

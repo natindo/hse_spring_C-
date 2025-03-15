@@ -6,57 +6,54 @@ using Complex = std::complex<double>;
 
 Matrix::ProxyRow::ProxyRow() = default;
 
-Matrix::ProxyRow::ProxyRow(Complex* row_ptr, const int32_t cols)
-        : row_ptr_(row_ptr)
-        , cols_(cols)
-        {}
-
-Complex& Matrix::ProxyRow::operator[](const int32_t col) const {
-    return row_ptr_[col];
+Matrix::ProxyRow::ProxyRow(const int32_t cols_count)
+    : data_(new Complex[cols_count]),
+      cols_number_(cols_count)
+{
+    std::fill_n(data_, cols_number_, Complex(0.0, 0.0));
 }
 
-Matrix::Matrix(Matrix&& rhs) noexcept {
-    rows_ = rhs.rows_;
-    cols_ = rhs.cols_;
-    data_ = rhs.data_;
-    row_proxies_ = rhs.row_proxies_;
-
-    rhs.row_proxies_ = nullptr;
+Matrix::ProxyRow::ProxyRow(ProxyRow&& rhs) noexcept
+    : data_(rhs.data_),
+      cols_number_(rhs.cols_number_)
+{
     rhs.data_ = nullptr;
-    rhs.rows_ = 0;
-    rhs.cols_ = 0;
+    rhs.cols_number_ = 0;
 }
 
-Matrix& Matrix::operator=(Matrix&& other) noexcept {
-    if (this != &other) {
+Matrix::ProxyRow& Matrix::ProxyRow::operator=(ProxyRow&& rhs) noexcept {
+    if (this != &rhs) {
         delete[] data_;
-        delete[] row_proxies_;
 
-        rows_ = other.rows_;
-        cols_ = other.cols_;
-        data_ = other.data_;
-        row_proxies_ = other.row_proxies_;
+        data_ = rhs.data_;
+        cols_number_ = rhs.cols_number_;
 
-        other.rows_ = 0;
-        other.cols_ = 0;
-        other.data_ = nullptr;
-        other.row_proxies_ = nullptr;
+        rhs.data_ = nullptr;
+        rhs.cols_number_ = 0;
     }
     return *this;
+}
+
+Matrix::ProxyRow::~ProxyRow() {
+    delete[] data_;
+    data_ = nullptr;
+    cols_number_ = 0;
+}
+
+Complex& Matrix::ProxyRow::operator[](const int32_t col) const {
+    return data_[col];
 }
 
 Matrix::Matrix (const int32_t rows, const int32_t cols) : rows_(rows), cols_(cols) {
     if (rows < 0 || cols < 0) {
         throw std::invalid_argument("Matrix dimensions must be positive");
     }
-    data_ = new Complex[rows_ * cols_];
-    std::fill_n(data_, rows * cols, Complex(0.0, 0.0));
-
-    row_proxies_ = new ProxyRow[rows];
-    for (int r = 0; r < rows; ++r) {
-        row_proxies_[r] = ProxyRow(data_ + r*cols, cols);
+    proxy_rows_ = new ProxyRow[rows_];
+    for (int32_t r = 0; r < rows_; ++r) {
+        proxy_rows_[r] = ProxyRow(cols_);
     }
 }
+
 
 Matrix::Matrix (const std::string& filename) {
     fd = open(filename.c_str(), O_RDWR);
@@ -105,29 +102,77 @@ Matrix::Matrix (const std::string& filename) {
         return;
     }
 
-    data_ = new Complex[rows_ * cols_];
-    row_proxies_ = new ProxyRow[rows_];
-    for (int i = 0; i < rows_; ++i) {
-        row_proxies_[i] = ProxyRow(data_ + i * cols_, cols_);
+    proxy_rows_ = new ProxyRow[rows_];
+    for (int32_t i = 0; i < rows_; ++i) {
+        proxy_rows_[i] = ProxyRow(cols_);
     }
 
-    for (int r = 0; r < rows_; ++r) {
-        for (int c = 0; c < cols_; ++c) {
+    // Считываем данные по строкам
+    for (int32_t r = 0; r < rows_; ++r) {
+        for (int32_t c = 0; c < cols_; ++c) {
             double re = 0.0, im = 0.0;
             iss >> re >> im;
             if (!iss) {
                 std::cerr << "Ошибка чтения элемента матрицы\n";
                 return;
             }
-            data_[r * cols_ + c] = Complex(re, im);
+            proxy_rows_[r][c] = Complex(re, im);
         }
     }
     std::cout << std::endl;
 }
 
+Matrix::Matrix(Matrix&& rhs) noexcept {
+    rows_ = rhs.rows_;
+    cols_ = rhs.cols_;
+    proxy_rows_ = rhs.proxy_rows_;
+
+    mapPtr = rhs.mapPtr;
+    fileSize = rhs.fileSize;
+    fd = rhs.fd;
+
+    rhs.proxy_rows_ = nullptr;
+    rhs.rows_ = 0;
+    rhs.cols_ = 0;
+
+    rhs.mapPtr = nullptr;
+    rhs.fileSize = 0;
+    rhs.fd = -1;
+}
+
+Matrix& Matrix::operator=(Matrix&& rhs) noexcept {
+    if (this != &rhs) {
+        delete[] proxy_rows_;
+        proxy_rows_ = nullptr;
+
+        if (mapPtr != nullptr) {
+            msync(mapPtr, fileSize, MS_SYNC);
+            munmap(mapPtr, fileSize);
+            close(fd);
+        }
+
+        rows_ = rhs.rows_;
+        cols_ = rhs.cols_;
+        proxy_rows_ = rhs.proxy_rows_;
+
+        mapPtr = rhs.mapPtr;
+        fileSize = rhs.fileSize;
+        fd = rhs.fd;
+
+        rhs.proxy_rows_ = nullptr;
+        rhs.rows_ = 0;
+        rhs.cols_ = 0;
+
+        rhs.mapPtr = nullptr;
+        rhs.fileSize = 0;
+        rhs.fd = -1;
+    }
+    return *this;
+}
+
 Matrix::~Matrix() {
-    delete[] data_;
-    delete[] row_proxies_;
+    delete[] proxy_rows_;
+    proxy_rows_ = nullptr;
     if (mapPtr != nullptr) {
         msync(mapPtr, fileSize, MS_SYNC);
         if (munmap(mapPtr, fileSize) == -1) {
@@ -137,52 +182,62 @@ Matrix::~Matrix() {
     }
 }
 
-[[nodiscard]] Matrix Matrix::clone() const {
-    Matrix m(rows_, cols_);
-    for (int32_t i = 0; i < rows_ * cols_; ++i) {
-        m.data_[i] = data_[i];
-    }
-    return m;
-}
-
 Matrix::ProxyRow& Matrix::operator[](const int32_t row) const {
-    return row_proxies_[row];
+    return proxy_rows_[row];
 }
 
 [[nodiscard]] Complex& Matrix::at(const int32_t row, const int32_t col) const {
     checkBounds(row, col);
-    return data_[row * cols_ + col];
+    return proxy_rows_[row][col];
+}
+
+[[nodiscard]] Matrix Matrix::clone() const {
+    Matrix m(rows_, cols_);
+    for (int32_t r = 0; r < rows_; ++r) {
+        for (int32_t c = 0; c < cols_; ++c) {
+            m[r][c] = proxy_rows_[r][c];
+        }
+    }
+    return m;
 }
 
 // ----------- operator + ----------- //
 Matrix Matrix::operator + (const Matrix& rhs) const {
     checkSameSize(rhs);
     Matrix result(rows_, cols_);
-    for (int i = 0; i < rows_ * cols_; ++i) {
-        result.data_[i] = data_[i] + rhs.data_[i];
+    for (int32_t i = 0; i < rows_; ++i) {
+        for (int32_t j = 0; j < cols_; ++j) {
+            result[i][j] = proxy_rows_[i][j] + rhs[i][j];
+        }
     }
     return result;
 }
 
 Matrix Matrix::operator + (const Complex& val) const {
     Matrix result(rows_, cols_);
-    for (int i = 0; i < rows_ * cols_; ++i) {
-        result.data_[i] = data_[i] + val;
+    for (int32_t i = 0; i < rows_; ++i) {
+        for (int32_t j = 0; j < cols_; ++j) {
+            result[i][j] = proxy_rows_[i][j] + val;
+        }
     }
     return result;
 }
 
 Matrix& Matrix::operator += (const Matrix& rhs) {
     checkSameSize(rhs);
-    for (int32_t i = 0; i < rows_ * cols_; ++i) {
-        data_[i] += rhs.data_[i];
+    for (int32_t i = 0; i < rows_; ++i) {
+        for (int32_t j = 0; j < cols_; ++j) {
+            proxy_rows_[i][j] = proxy_rows_[i][j] + rhs[i][j];
+        }
     }
     return *this;
 }
 
 Matrix& Matrix::operator += (const Complex& val) {
-    for (int32_t i = 0; i < rows_ * cols_; ++i) {
-        data_[i] += val;
+    for (int32_t i = 0; i < rows_; ++i) {
+        for (int32_t j = 0; j < cols_; ++j) {
+            proxy_rows_[i][j] = proxy_rows_[i][j] + val;
+        }
     }
     return *this;
 }
@@ -192,31 +247,39 @@ Matrix& Matrix::operator += (const Complex& val) {
 Matrix Matrix::operator - (const Matrix& rhs) const {
     checkSameSize(rhs);
     Matrix result(rows_, cols_);
-    for (int i = 0; i < rows_ * cols_; ++i) {
-        result.data_[i] = data_[i] - rhs.data_[i];
+    for (int32_t i = 0; i < rows_; ++i) {
+        for (int32_t j = 0; j < cols_; ++j) {
+            result[i][j] = proxy_rows_[i][j] - rhs[i][j];
+        }
     }
     return result;
 }
 
 Matrix Matrix::operator - (const Complex& val) const {
     Matrix result(rows_, cols_);
-    for (int i = 0; i < rows_ * cols_; ++i) {
-        result.data_[i] = data_[i] - val;
+    for (int32_t i = 0; i < rows_; ++i) {
+        for (int32_t j = 0; j < cols_; ++j) {
+            result[i][j] = proxy_rows_[i][j] - val;
+        }
     }
     return result;
 }
 
 Matrix& Matrix::operator -= (const Matrix& rhs) {
     checkSameSize(rhs);
-    for (int32_t i = 0; i < rows_ * cols_; ++i) {
-        data_[i] -= rhs.data_[i];
+    for (int32_t i = 0; i < rows_; ++i) {
+        for (int32_t j = 0; j < cols_; ++j) {
+            proxy_rows_[i][j] = proxy_rows_[i][j] - rhs[i][j];
+        }
     }
     return *this;
 }
 
 Matrix& Matrix::operator -= (const Complex& val) {
-    for (int32_t i = 0; i < rows_ * cols_; ++i) {
-        data_[i] -= val;
+    for (int32_t i = 0; i < rows_; ++i) {
+        for (int32_t j = 0; j < cols_; ++j) {
+            proxy_rows_[i][j] = proxy_rows_[i][j] - val;
+        }
     }
     return *this;
 }
@@ -225,8 +288,10 @@ Matrix& Matrix::operator -= (const Complex& val) {
 
 Matrix Matrix::operator * (const Complex& val) const {
     Matrix result(rows_, cols_);
-    for (int32_t i = 0; i < rows_ * cols_; ++i) {
-        result.data_[i] = data_[i] * val;
+    for (int32_t i = 0; i < rows_; ++i) {
+        for (int32_t j = 0; j < cols_; ++j) {
+            result[i][j] += proxy_rows_[i][j] * val;
+        }
     }
     return result;
 }
@@ -234,8 +299,10 @@ Matrix Matrix::operator * (const Complex& val) const {
 Matrix Matrix::operator * (const Matrix& rhs) const {
     checkSameSize(rhs);
     Matrix result(rows_, cols_);
-    for (int32_t i = 0; i < rows_ * cols_; ++i) {
-        result.data_[i] = data_[i] * rhs.data_[i];
+    for (int32_t i = 0; i < rows_; ++i) {
+        for (int32_t j = 0; j < cols_; ++j) {
+            result[i][j] += proxy_rows_[i][j] * rhs[i][j];
+        }
     }
     return result;
 }
@@ -248,8 +315,10 @@ Matrix Matrix::operator / (const Complex& val) {
     }
     Matrix result(rows_, cols_);
 
-    for (int32_t i = 0; i < rows_ * cols_; ++i) {
-        result.data_[i] /= val;
+    for (int32_t r = 0; r < rows_; ++r) {
+        for (int32_t c = 0; c < cols_; ++c) {
+            result[r][c] = proxy_rows_[r][c] / val;
+        }
     }
     return result;
 }
@@ -258,8 +327,10 @@ Matrix Matrix::operator / (const Complex& val) {
 
 Matrix Matrix::operator - () const {
     Matrix res(rows_, cols_);
-    for (int32_t i = 0; i < rows_ * cols_; ++i) {
-        res.data_[i] = -data_[i];
+    for (int32_t r = 0; r < rows_; ++r) {
+        for (int32_t c = 0; c < cols_; ++c) {
+            res[r][c] = -proxy_rows_[r][c];
+        }
     }
     return res;
 }
