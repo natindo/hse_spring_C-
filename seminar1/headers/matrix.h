@@ -8,6 +8,11 @@
 #include <iostream>
 #include <complex>
 #include <cstdint>
+#include <fcntl.h>
+#include <sys/mman.h>   // Для mmap(), munmap()
+#include <sys/stat.h>   // Для fstat()
+#include <unistd.h>     // Для close()
+#include <cstring>      // Для memcpy()
 
 class Matrix {
     using Complex = std::complex<double>;
@@ -33,6 +38,7 @@ public:
     Matrix& operator=(Matrix&& other) noexcept;
 
     Matrix (int32_t rows, int32_t cols);
+    Matrix (const std::string& filename);
     ~Matrix();
 
     [[nodiscard]] Matrix clone() const;
@@ -76,6 +82,10 @@ private:
     int32_t cols_ = 0;
     Complex* data_ = nullptr;
     ProxyRow* row_proxies_ = nullptr;
+
+    int fd = 0;
+    std::size_t fileSize = 0;
+    void* mapPtr = nullptr;
 };
 
 

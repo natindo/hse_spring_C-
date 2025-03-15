@@ -1,5 +1,7 @@
 #include "matrix.h"
 
+#include <sys/stat.h>
+
 using Complex = std::complex<double>;
 
 Matrix::ProxyRow::ProxyRow() = default;
@@ -56,9 +58,83 @@ Matrix::Matrix (const int32_t rows, const int32_t cols) : rows_(rows), cols_(col
     }
 }
 
+Matrix::Matrix (const std::string& filename) {
+    fd = open(filename.c_str(), O_RDWR);
+    if (fd == -1) {
+        std::cerr << "Не удалось открыть файл" << std::endl;
+        return;
+    }
+
+    struct stat sb{};
+    if (fstat(fd, &sb) == -1) {
+        std::cerr << "Не удалось выполнить fstat" << std::endl;
+        close(fd);
+        return;
+    }
+
+    fileSize = sb.st_size;
+    if (fileSize == 0) {
+        std::cerr << "Файл пустой" << std::endl;
+        close(fd);
+        return;
+    }
+
+
+    mapPtr = mmap(
+        nullptr,           // Адрес, с которого хотим отобразить (nullptr => ОС выберет адрес сама)
+        fileSize,          // Количество байт для отображения
+        PROT_READ | PROT_WRITE, // Права доступа (чтение/запись)
+        MAP_SHARED,        // Разделяемое отображение (изменения отобразятся в файле)
+        fd,                // Дескриптор файла
+        0                  // Смещение в файле (начиная с 0)
+    );
+
+    if (mapPtr == MAP_FAILED) {
+        std::cerr << "Не удалось выполнить mmap" << std::endl;
+        close(fd);
+        return;
+    }
+
+    char* data = static_cast<char*>(mapPtr);
+    std::string fileData(data, fileSize);
+    std::istringstream iss(fileData);
+
+    iss >> rows_ >> cols_;
+    if (!iss) {
+        std::cerr << "Ошибка чтения размеров матрицы\n";
+        return;
+    }
+
+    data_ = new Complex[rows_ * cols_];
+    row_proxies_ = new ProxyRow[rows_];
+    for (int i = 0; i < rows_; ++i) {
+        row_proxies_[i] = ProxyRow(data_ + i * cols_, cols_);
+    }
+
+    for (int r = 0; r < rows_; ++r) {
+        for (int c = 0; c < cols_; ++c) {
+            double re = 0.0, im = 0.0;
+            iss >> re >> im;
+            if (!iss) {
+                std::cerr << "Ошибка чтения элемента матрицы\n";
+                return;
+            }
+            data_[r * cols_ + c] = Complex(re, im);
+        }
+    }
+    std::cout << std::endl;
+}
+
 Matrix::~Matrix() {
     delete[] data_;
     delete[] row_proxies_;
+    if (mapPtr != nullptr) {
+        msync(mapPtr, fileSize, MS_SYNC);
+        if (munmap(mapPtr, fileSize) == -1) {
+            std::cerr << "Не удалось выполнить munmap" << std::endl;
+        }
+        close(fd);
+    }
 }
 
 [[nodiscard]] Matrix Matrix::clone() const {
